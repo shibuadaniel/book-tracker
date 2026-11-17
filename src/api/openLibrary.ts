@@ -12,6 +12,13 @@ interface OpenLibraryResponse {
   docs?: OpenLibraryDoc[]
 }
 
+export interface BookSearchParams {
+  /** Free-text query (title, author, or both). */
+  query?: string
+  title?: string
+  author?: string
+}
+
 export function openLibraryCoverUrl(coverId: number, size: 'S' | 'M' | 'L' = 'M'): string {
   return `https://covers.openlibrary.org/b/id/${coverId}-${size}.jpg`
 }
@@ -20,22 +27,8 @@ export function coverFromIsbn(isbn: string, size: 'S' | 'M' | 'L' = 'M'): string
   return `https://covers.openlibrary.org/b/isbn/${isbn}-${size}.jpg`
 }
 
-export async function searchBooks(query: string, signal?: AbortSignal): Promise<SearchResult[]> {
-  const q = query.trim()
-  if (!q) return []
-
-  const url = new URL('https://openlibrary.org/search.json')
-  url.searchParams.set('q', q)
-  url.searchParams.set('limit', '20')
-  url.searchParams.set('fields', 'key,title,author_name,cover_i,isbn')
-
-  const res = await fetch(url, { signal })
-  if (!res.ok) {
-    throw new Error(`Search failed (${res.status})`)
-  }
-
-  const data = (await res.json()) as OpenLibraryResponse
-  return (data.docs ?? [])
+function mapDocs(docs: OpenLibraryDoc[] | undefined): SearchResult[] {
+  return (docs ?? [])
     .filter((doc) => doc.key && doc.title)
     .map((doc) => {
       const isbn = doc.isbn?.[0]
@@ -52,4 +45,37 @@ export async function searchBooks(query: string, signal?: AbortSignal): Promise<
         coverUrl,
       }
     })
+}
+
+/** Search by free-text query and/or dedicated title / author fields. */
+export async function searchBooks(
+  input: string | BookSearchParams,
+  signal?: AbortSignal,
+): Promise<SearchResult[]> {
+  const params: BookSearchParams =
+    typeof input === 'string' ? { query: input } : input
+
+  const query = params.query?.trim() ?? ''
+  const title = params.title?.trim() ?? ''
+  const author = params.author?.trim() ?? ''
+
+  if (!query && !title && !author) return []
+
+  const url = new URL('https://openlibrary.org/search.json')
+  url.searchParams.set('limit', '24')
+  url.searchParams.set('fields', 'key,title,author_name,cover_i,isbn')
+
+  if (title) url.searchParams.set('title', title)
+  if (author) url.searchParams.set('author', author)
+  if (query) url.searchParams.set('q', query)
+  // When only title and/or author are set, Open Library still needs a q or
+  // the dedicated fields alone — title/author params work without q.
+
+  const res = await fetch(url, { signal })
+  if (!res.ok) {
+    throw new Error(`Search failed (${res.status})`)
+  }
+
+  const data = (await res.json()) as OpenLibraryResponse
+  return mapDocs(data.docs)
 }
