@@ -15,7 +15,8 @@ import { useEffect, useMemo, useState } from 'react'
 import { fetchNytList } from '../api/nyt'
 import { searchBooks } from '../api/openLibrary'
 import { DiscoverBookCard } from '../components/BookCard'
-import type { NytListBook, SearchResult, ShelfBook } from '../types'
+import { BookDetailDialog } from '../components/BookDetailDialog'
+import type { BookDetailSeed, NytListBook, SearchResult, ShelfBook } from '../types'
 import { NYT_LISTS } from '../types'
 
 interface DiscoverPageProps {
@@ -35,6 +36,7 @@ type DiscoverCard = {
   weeksOnList?: number
   source: 'search' | 'nyt'
   nytList?: string
+  description?: string | null
 }
 
 export function DiscoverPage({ apiKey, hasKey, hasBook, onAdd, onOpenSettings }: DiscoverPageProps) {
@@ -48,6 +50,7 @@ export function DiscoverPage({ apiKey, hasKey, hasBook, onAdd, onOpenSettings }:
   const [listLoading, setListLoading] = useState(false)
   const [searchError, setSearchError] = useState<string | null>(null)
   const [listError, setListError] = useState<string | null>(null)
+  const [selected, setSelected] = useState<BookDetailSeed | null>(null)
 
   const searching = useMemo(() => {
     return titleQuery.trim().length >= 2 || authorQuery.trim().length >= 2
@@ -134,6 +137,7 @@ export function DiscoverPage({ apiKey, hasKey, hasBook, onAdd, onOpenSettings }:
         weeksOnList: book.weeksOnList,
         source: 'nyt' as const,
         nytList: book.listName,
+        description: book.description,
       }))
 
   const loading = searching ? searchLoading : listLoading
@@ -280,6 +284,19 @@ export function DiscoverPage({ apiKey, hasKey, hasBook, onAdd, onOpenSettings }:
                 rank={book.rank}
                 weeksOnList={book.weeksOnList}
                 onShelf={hasBook(book.id)}
+                onOpen={() =>
+                  setSelected({
+                    id: book.id,
+                    title: book.title,
+                    authors: book.authors,
+                    coverUrl: book.coverUrl,
+                    description: book.description,
+                    rank: book.rank,
+                    weeksOnList: book.weeksOnList,
+                    source: book.source,
+                    nytList: book.nytList,
+                  })
+                }
                 onAdd={() =>
                   onAdd({
                     id: book.id,
@@ -288,6 +305,7 @@ export function DiscoverPage({ apiKey, hasKey, hasBook, onAdd, onOpenSettings }:
                     coverUrl: book.coverUrl,
                     source: book.source,
                     nytList: book.nytList,
+                    description: book.description,
                     status: 'want',
                   })
                 }
@@ -296,6 +314,30 @@ export function DiscoverPage({ apiKey, hasKey, hasBook, onAdd, onOpenSettings }:
           ))}
         </Grid>
       ) : null}
+
+      <BookDetailDialog
+        open={Boolean(selected)}
+        book={selected}
+        onClose={() => setSelected(null)}
+        onShelf={selected ? hasBook(selected.id) : false}
+        onAdd={
+          selected
+            ? () => {
+                onAdd({
+                  id: selected.id,
+                  title: selected.title,
+                  authors: selected.authors,
+                  coverUrl: selected.coverUrl,
+                  source: selected.source ?? 'search',
+                  nytList: selected.nytList,
+                  description: selected.description,
+                  status: 'want',
+                })
+                setSelected(null)
+              }
+            : undefined
+        }
+      />
     </Box>
   )
 }

@@ -6,6 +6,7 @@ import Stack from '@mui/material/Stack'
 import Typography from '@mui/material/Typography'
 import { useMemo, useState } from 'react'
 import { BookCard } from '../components/BookCard'
+import { BookDetailDialog } from '../components/BookDetailDialog'
 import type { ReadingStatus, ShelfBook } from '../types'
 import { STATUS_LABELS } from '../types'
 
@@ -20,11 +21,14 @@ type Filter = 'all' | ReadingStatus
 
 export function ShelfPage({ books, onStatusChange, onRemove, onAddClick }: ShelfPageProps) {
   const [filter, setFilter] = useState<Filter>('all')
+  const [selectedId, setSelectedId] = useState<string | null>(null)
 
   const filtered = useMemo(() => {
     if (filter === 'all') return books
     return books.filter((b) => b.status === filter)
   }, [books, filter])
+
+  const selected = selectedId ? books.find((b) => b.id === selectedId) ?? null : null
 
   return (
     <Box>
@@ -89,11 +93,47 @@ export function ShelfPage({ books, onStatusChange, onRemove, onAddClick }: Shelf
         <Grid container spacing={1.25}>
           {filtered.map((book) => (
             <Grid key={book.id} size={6}>
-              <BookCard book={book} onStatusChange={onStatusChange} onRemove={onRemove} />
+              <BookCard
+                book={book}
+                onOpen={() => setSelectedId(book.id)}
+                onStatusChange={onStatusChange}
+                onRemove={onRemove}
+              />
             </Grid>
           ))}
         </Grid>
       )}
+
+      <BookDetailDialog
+        open={Boolean(selected)}
+        book={
+          selected
+            ? {
+                id: selected.id,
+                title: selected.title,
+                authors: selected.authors,
+                coverUrl: selected.coverUrl,
+                description: selected.description,
+                source: selected.source,
+                nytList: selected.nytList,
+                status: selected.status,
+              }
+            : null
+        }
+        onClose={() => setSelectedId(null)}
+        onShelf
+        onRemove={
+          selected
+            ? () => {
+                onRemove(selected.id)
+                setSelectedId(null)
+              }
+            : undefined
+        }
+        onStatusChange={
+          selected ? (status) => onStatusChange(selected.id, status) : undefined
+        }
+      />
     </Box>
   )
 }

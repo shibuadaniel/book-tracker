@@ -12,6 +12,7 @@ interface NytBook {
   primary_isbn13?: string
   primary_isbn10?: string
   book_image?: string
+  description?: string
   rank?: number
   weeks_on_list?: number
   isbns?: NytIsbn[]
@@ -77,6 +78,7 @@ export async function fetchNytList(
       rank: book.rank ?? index + 1,
       weeksOnList: book.weeks_on_list ?? 0,
       listName: listSlug,
+      description: book.description?.trim() || null,
     }
   })
 }

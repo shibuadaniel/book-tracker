@@ -1,5 +1,6 @@
 import DeleteOutlineRoundedIcon from '@mui/icons-material/DeleteOutlineRounded'
 import Card from '@mui/material/Card'
+import CardActionArea from '@mui/material/CardActionArea'
 import CardActions from '@mui/material/CardActions'
 import CardContent from '@mui/material/CardContent'
 import Chip from '@mui/material/Chip'
@@ -14,11 +15,12 @@ import { STATUS_LABELS } from '../types'
 
 interface BookCardProps {
   book: ShelfBook
+  onOpen: () => void
   onStatusChange: (id: string, status: ReadingStatus) => void
   onRemove: (id: string) => void
 }
 
-export function BookCard({ book, onStatusChange, onRemove }: BookCardProps) {
+export function BookCard({ book, onOpen, onStatusChange, onRemove }: BookCardProps) {
   return (
     <Card
       sx={{
@@ -28,41 +30,44 @@ export function BookCard({ book, onStatusChange, onRemove }: BookCardProps) {
         overflow: 'hidden',
       }}
     >
-      <BookCover coverUrl={book.coverUrl} title={book.title} height={168} />
-      <CardContent sx={{ flexGrow: 1, p: 1.25, pb: 0.5, '&:last-child': { pb: 0.5 } }}>
-        <Typography
-          variant="subtitle2"
-          sx={{
-            fontWeight: 700,
-            lineHeight: 1.25,
-            display: '-webkit-box',
-            WebkitLineClamp: 2,
-            WebkitBoxOrient: 'vertical',
-            overflow: 'hidden',
-            minHeight: '2.5em',
-          }}
-        >
-          {book.title}
-        </Typography>
-        <Typography
-          variant="caption"
-          color="text.secondary"
-          sx={{
-            display: '-webkit-box',
-            WebkitLineClamp: 1,
-            WebkitBoxOrient: 'vertical',
-            overflow: 'hidden',
-            mt: 0.5,
-          }}
-        >
-          {book.authors.join(', ') || 'Unknown author'}
-        </Typography>
-      </CardContent>
+      <CardActionArea onClick={onOpen} sx={{ alignItems: 'stretch', flexGrow: 1 }}>
+        <BookCover coverUrl={book.coverUrl} title={book.title} height={168} />
+        <CardContent sx={{ flexGrow: 1, p: 1.25, pb: 0.5, '&:last-child': { pb: 0.5 } }}>
+          <Typography
+            variant="subtitle2"
+            sx={{
+              fontWeight: 700,
+              lineHeight: 1.25,
+              display: '-webkit-box',
+              WebkitLineClamp: 2,
+              WebkitBoxOrient: 'vertical',
+              overflow: 'hidden',
+              minHeight: '2.5em',
+            }}
+          >
+            {book.title}
+          </Typography>
+          <Typography
+            variant="caption"
+            color="text.secondary"
+            sx={{
+              display: '-webkit-box',
+              WebkitLineClamp: 1,
+              WebkitBoxOrient: 'vertical',
+              overflow: 'hidden',
+              mt: 0.5,
+            }}
+          >
+            {book.authors.join(', ') || 'Unknown author'}
+          </Typography>
+        </CardContent>
+      </CardActionArea>
       <CardActions sx={{ px: 1, pb: 1, pt: 0.5, gap: 0.5 }}>
         <Select
           size="small"
           value={book.status}
           onChange={(e) => onStatusChange(book.id, e.target.value as ReadingStatus)}
+          onClick={(e) => e.stopPropagation()}
           sx={{
             flex: 1,
             fontSize: 12,
@@ -96,6 +101,7 @@ interface DiscoverBookCardProps {
   rank?: number
   weeksOnList?: number
   onShelf: boolean
+  onOpen: () => void
   onAdd: () => void
 }
 
@@ -106,46 +112,49 @@ export function DiscoverBookCard({
   rank,
   weeksOnList,
   onShelf,
+  onOpen,
   onAdd,
 }: DiscoverBookCardProps) {
   return (
     <Card sx={{ height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-      <BookCover coverUrl={coverUrl} title={title} height={168} />
-      <CardContent sx={{ flexGrow: 1, p: 1.25, pb: 0.75 }}>
-        <Stack direction="row" spacing={0.5} sx={{ mb: 0.75, flexWrap: 'wrap', gap: 0.5 }}>
-          {typeof rank === 'number' ? <Chip size="small" label={`#${rank}`} /> : null}
-          {weeksOnList ? (
-            <Chip size="small" variant="outlined" label={`${weeksOnList} wk`} />
-          ) : null}
-        </Stack>
-        <Typography
-          variant="subtitle2"
-          sx={{
-            fontWeight: 700,
-            lineHeight: 1.25,
-            display: '-webkit-box',
-            WebkitLineClamp: 2,
-            WebkitBoxOrient: 'vertical',
-            overflow: 'hidden',
-            minHeight: '2.5em',
-          }}
-        >
-          {title}
-        </Typography>
-        <Typography
-          variant="caption"
-          color="text.secondary"
-          sx={{
-            display: '-webkit-box',
-            WebkitLineClamp: 1,
-            WebkitBoxOrient: 'vertical',
-            overflow: 'hidden',
-            mt: 0.5,
-          }}
-        >
-          {authors.join(', ') || 'Unknown author'}
-        </Typography>
-      </CardContent>
+      <CardActionArea onClick={onOpen} sx={{ alignItems: 'stretch', flexGrow: 1 }}>
+        <BookCover coverUrl={coverUrl} title={title} height={168} />
+        <CardContent sx={{ flexGrow: 1, p: 1.25, pb: 0.75 }}>
+          <Stack direction="row" spacing={0.5} sx={{ mb: 0.75, flexWrap: 'wrap', gap: 0.5 }}>
+            {typeof rank === 'number' ? <Chip size="small" label={`#${rank}`} /> : null}
+            {weeksOnList ? (
+              <Chip size="small" variant="outlined" label={`${weeksOnList} wk`} />
+            ) : null}
+          </Stack>
+          <Typography
+            variant="subtitle2"
+            sx={{
+              fontWeight: 700,
+              lineHeight: 1.25,
+              display: '-webkit-box',
+              WebkitLineClamp: 2,
+              WebkitBoxOrient: 'vertical',
+              overflow: 'hidden',
+              minHeight: '2.5em',
+            }}
+          >
+            {title}
+          </Typography>
+          <Typography
+            variant="caption"
+            color="text.secondary"
+            sx={{
+              display: '-webkit-box',
+              WebkitLineClamp: 1,
+              WebkitBoxOrient: 'vertical',
+              overflow: 'hidden',
+              mt: 0.5,
+            }}
+          >
+            {authors.join(', ') || 'Unknown author'}
+          </Typography>
+        </CardContent>
+      </CardActionArea>
       <CardActions sx={{ px: 1, pb: 1, pt: 0 }}>
         <Chip
           clickable={!onShelf}

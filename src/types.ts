@@ -10,6 +10,7 @@ export interface ShelfBook {
   status: ReadingStatus
   source: BookSource
   nytList?: string
+  description?: string | null
   addedAt: string
 }
 
@@ -28,6 +29,21 @@ export interface NytListBook {
   rank: number
   weeksOnList: number
   listName: string
+  description?: string | null
+}
+
+/** Shared shape for the book detail sheet. */
+export interface BookDetailSeed {
+  id: string
+  title: string
+  authors: string[]
+  coverUrl: string | null
+  description?: string | null
+  rank?: number
+  weeksOnList?: number
+  source?: BookSource
+  nytList?: string
+  status?: ReadingStatus
 }
 
 export interface NytListOption {

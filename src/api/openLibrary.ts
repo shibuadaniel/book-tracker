@@ -85,3 +85,135 @@ export async function searchBooks(
   const data = (await res.json()) as OpenLibraryResponse
   return mapDocs(data.docs)
 }
+
+export interface BookDetails {
+  id: string
+  title: string
+  authors: string[]
+  coverUrl: string | null
+  description: string | null
+  subjects: string[]
+  publishDate: string | null
+}
+
+type OlText = string | { type?: string; value?: string } | null | undefined
+
+function readText(value: OlText): string | null {
+  if (!value) return null
+  if (typeof value === 'string') {
+    const trimmed = value.trim()
+    return trimmed || null
+  }
+  if (typeof value === 'object' && typeof value.value === 'string') {
+    const trimmed = value.value.trim()
+    return trimmed || null
+  }
+  return null
+}
+
+function isWorkKey(id: string): boolean {
+  return id.startsWith('/works/')
+}
+
+function looksLikeIsbn(id: string): boolean {
+  return /^[0-9]{9}[0-9Xx]$|^[0-9]{13}$/.test(id.replace(/-/g, ''))
+}
+
+async function fetchJson<T>(url: string, signal?: AbortSignal): Promise<T | null> {
+  const res = await fetch(url, { signal })
+  if (!res.ok) return null
+  return (await res.json()) as T
+}
+
+/**
+ * Load synopsis and extra metadata from Open Library.
+ * Accepts a work key (`/works/...`), ISBN, or falls back to title+author search.
+ */
+export async function fetchBookDetails(
+  seed: {
+    id: string
+    title: string
+    authors: string[]
+    coverUrl: string | null
+    description?: string | null
+  },
+  signal?: AbortSignal,
+): Promise<BookDetails> {
+  const base: BookDetails = {
+    id: seed.id,
+    title: seed.title,
+    authors: seed.authors,
+    coverUrl: seed.coverUrl,
+    description: seed.description?.trim() || null,
+    subjects: [],
+    publishDate: null,
+  }
+
+  type WorkJson = {
+    key?: string
+    title?: string
+    description?: OlText
+    subjects?: string[]
+    covers?: number[]
+    authors?: Array<{ author?: { key?: string } }>
+  }
+
+  type EditionJson = {
+    title?: string
+    description?: OlText
+    publish_date?: string
+    number_of_pages?: number
+    covers?: number[]
+    works?: Array<{ key?: string }>
+  }
+
+  let work: WorkJson | null = null
+  let edition: EditionJson | null = null
+
+  if (isWorkKey(seed.id)) {
+    work = await fetchJson<WorkJson>(`https://openlibrary.org${seed.id}.json`, signal)
+  } else if (looksLikeIsbn(seed.id)) {
+    edition = await fetchJson<EditionJson>(
+      `https://openlibrary.org/isbn/${seed.id.replace(/-/g, '')}.json`,
+      signal,
+    )
+    const workKey = edition?.works?.[0]?.key
+    if (workKey) {
+      work = await fetchJson<WorkJson>(`https://openlibrary.org${workKey}.json`, signal)
+    }
+  } else {
+    // NYT composite ids or unknown — resolve via search
+    const q = [seed.title, seed.authors[0]].filter(Boolean).join(' ')
+    if (q) {
+      const results = await searchBooks({ query: q }, signal)
+      const match = results[0]
+      if (match && isWorkKey(match.id)) {
+        work = await fetchJson<WorkJson>(`https://openlibrary.org${match.id}.json`, signal)
+        if (!base.coverUrl && match.coverUrl) base.coverUrl = match.coverUrl
+        base.id = match.id
+      }
+    }
+  }
+
+  if (work) {
+    base.id = work.key || base.id
+    base.title = work.title || base.title
+    const desc = readText(work.description)
+    if (desc) base.description = desc
+    base.subjects = (work.subjects ?? []).slice(0, 12)
+    if (!base.coverUrl && work.covers?.[0]) {
+      base.coverUrl = openLibraryCoverUrl(work.covers[0], 'L')
+    }
+  }
+
+  if (edition) {
+    const editionDesc = readText(edition.description)
+    if (!base.description && editionDesc) base.description = editionDesc
+    if (edition.publish_date) base.publishDate = edition.publish_date
+    if (!base.coverUrl && edition.covers?.[0]) {
+      base.coverUrl = openLibraryCoverUrl(edition.covers[0], 'L')
+    }
+  }
+
+  return base
+}
