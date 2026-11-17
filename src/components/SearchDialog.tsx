@@ -134,7 +134,7 @@ export function SearchDialog({ open, onClose, onSelect, isOnShelf }: SearchDialo
                   onSelect(book)
                   onClose()
                 }}
-                sx={{ borderRadius: 2, mb: 0.5, minHeight: 64 }}
+                sx={{ borderRadius: 1, mb: 0.5, minHeight: 64 }}
               >
                 <ListItemAvatar>
                   <Avatar

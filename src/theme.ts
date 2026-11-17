@@ -56,7 +56,7 @@ export const theme = createTheme({
     },
   },
   shape: {
-    borderRadius: 14,
+    borderRadius: 4,
   },
   components: {
     MuiCssBaseline: {
@@ -78,6 +78,56 @@ export const theme = createTheme({
           boxShadow: 'none',
           border: '1px solid rgba(15, 61, 62, 0.1)',
           backgroundImage: 'none',
+          borderRadius: 4,
+        },
+      },
+    },
+    MuiButton: {
+      styleOverrides: {
+        root: {
+          borderRadius: 4,
+        },
+      },
+    },
+    MuiOutlinedInput: {
+      styleOverrides: {
+        root: {
+          borderRadius: 4,
+        },
+      },
+    },
+    MuiFilledInput: {
+      styleOverrides: {
+        root: {
+          borderRadius: 4,
+        },
+      },
+    },
+    MuiChip: {
+      styleOverrides: {
+        root: {
+          borderRadius: 4,
+        },
+      },
+    },
+    MuiAlert: {
+      styleOverrides: {
+        root: {
+          borderRadius: 4,
+        },
+      },
+    },
+    MuiDialog: {
+      styleOverrides: {
+        paper: {
+          borderRadius: 4,
+        },
+      },
+    },
+    MuiSelect: {
+      styleOverrides: {
+        root: {
+          borderRadius: 4,
         },
       },
     },
@@ -94,6 +144,7 @@ export const theme = createTheme({
       styleOverrides: {
         root: {
           boxShadow: 'none',
+          borderRadius: 4,
         },
       },
     },
