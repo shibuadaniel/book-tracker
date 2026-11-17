@@ -46,7 +46,11 @@ export async function fetchNytList(
     throw new Error('Add your NYT API key in Settings to browse bestsellers.')
   }
 
-  const url = new URL(`/api/nyt/lists/current/${encodeURIComponent(listSlug)}.json`, window.location.origin)
+  // NYT Books API allows browser CORS (Access-Control-Allow-Origin: *),
+  // so call it directly — works on Vite, tunnels, and GitHub Pages.
+  const url = new URL(
+    `https://api.nytimes.com/svc/books/v3/lists/current/${encodeURIComponent(listSlug)}.json`,
+  )
   url.searchParams.set('api-key', key)
 
   const res = await fetch(url, { signal })
