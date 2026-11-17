@@ -65,11 +65,17 @@ export async function searchBooks(
   url.searchParams.set('limit', '24')
   url.searchParams.set('fields', 'key,title,author_name,cover_i,isbn')
 
-  if (title) url.searchParams.set('title', title)
-  if (author) url.searchParams.set('author', author)
-  if (query) url.searchParams.set('q', query)
-  // When only title and/or author are set, Open Library still needs a q or
-  // the dedicated fields alone — title/author params work without q.
+  // Prefer dedicated fields for single-dimension search; when both title and
+  // author are set, use a combined q so partial titles still match.
+  if (query) {
+    url.searchParams.set('q', query)
+  } else if (title && author) {
+    url.searchParams.set('q', `${title} ${author}`)
+  } else if (title) {
+    url.searchParams.set('title', title)
+  } else if (author) {
+    url.searchParams.set('author', author)
+  }
 
   const res = await fetch(url, { signal })
   if (!res.ok) {
