@@ -47,6 +47,16 @@ function mapDocs(docs: OpenLibraryDoc[] | undefined): SearchResult[] {
     })
 }
 
+const searchCache = new Map<string, SearchResult[]>()
+
+function cacheKey(params: BookSearchParams): string {
+  return JSON.stringify({
+    q: params.query?.trim() || '',
+    t: params.title?.trim() || '',
+    a: params.author?.trim() || '',
+  })
+}
+
 /** Search by free-text query and/or dedicated title / author fields. */
 export async function searchBooks(
   input: string | BookSearchParams,
@@ -61,8 +71,13 @@ export async function searchBooks(
 
   if (!query && !title && !author) return []
 
+  const key = cacheKey(params)
+  const cached = searchCache.get(key)
+  if (cached) return cached
+
   const url = new URL('https://openlibrary.org/search.json')
-  url.searchParams.set('limit', '24')
+  // Keep payloads small — Open Library is often the slow hop.
+  url.searchParams.set('limit', '12')
   url.searchParams.set('fields', 'key,title,author_name,cover_i,isbn')
 
   // Prefer dedicated fields for single-dimension search; when both title and
@@ -83,7 +98,9 @@ export async function searchBooks(
   }
 
   const data = (await res.json()) as OpenLibraryResponse
-  return mapDocs(data.docs)
+  const mapped = mapDocs(data.docs)
+  searchCache.set(key, mapped)
+  return mapped
 }
 
 export interface BookDetails {

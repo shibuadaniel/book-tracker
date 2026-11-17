@@ -32,6 +32,12 @@ export interface NytListBook {
   description?: string | null
 }
 
+/** Current or past NYT list entry kept in the local searchable archive. */
+export interface ArchivedNytBook extends NytListBook {
+  publishedDate: string
+  fromPastList: boolean
+}
+
 /** Shared shape for the book detail sheet. */
 export interface BookDetailSeed {
   id: string

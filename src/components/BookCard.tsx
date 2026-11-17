@@ -100,6 +100,7 @@ interface DiscoverBookCardProps {
   coverUrl: string | null
   rank?: number
   weeksOnList?: number
+  pastBestSeller?: boolean
   onShelf: boolean
   onOpen: () => void
   onAdd: () => void
@@ -111,6 +112,7 @@ export function DiscoverBookCard({
   coverUrl,
   rank,
   weeksOnList,
+  pastBestSeller,
   onShelf,
   onOpen,
   onAdd,
@@ -121,8 +123,11 @@ export function DiscoverBookCard({
         <BookCover coverUrl={coverUrl} title={title} height={168} />
         <CardContent sx={{ flexGrow: 1, p: 1.25, pb: 0.75 }}>
           <Stack direction="row" spacing={0.5} sx={{ mb: 0.75, flexWrap: 'wrap', gap: 0.5 }}>
-            {typeof rank === 'number' ? <Chip size="small" label={`#${rank}`} /> : null}
-            {weeksOnList ? (
+            {pastBestSeller ? <Chip size="small" color="secondary" label="Past NYT" /> : null}
+            {!pastBestSeller && typeof rank === 'number' ? (
+              <Chip size="small" label={`#${rank}`} />
+            ) : null}
+            {!pastBestSeller && weeksOnList ? (
               <Chip size="small" variant="outlined" label={`${weeksOnList} wk`} />
             ) : null}
           </Stack>

@@ -12,11 +12,12 @@ import Stack from '@mui/material/Stack'
 import TextField from '@mui/material/TextField'
 import Typography from '@mui/material/Typography'
 import { useEffect, useMemo, useState } from 'react'
-import { fetchNytList } from '../api/nyt'
+import { ensureNytArchive, fetchNytList, searchNytArchive } from '../api/nyt'
 import { searchBooks } from '../api/openLibrary'
 import { DiscoverBookCard } from '../components/BookCard'
 import { BookDetailDialog } from '../components/BookDetailDialog'
-import type { BookDetailSeed, NytListBook, SearchResult, ShelfBook } from '../types'
+import { loadNytArchive } from '../storage'
+import type { ArchivedNytBook, BookDetailSeed, NytListBook, ShelfBook } from '../types'
 import { NYT_LISTS } from '../types'
 
 interface DiscoverPageProps {
@@ -37,6 +38,20 @@ type DiscoverCard = {
   source: 'search' | 'nyt'
   nytList?: string
   description?: string | null
+  pastBestSeller?: boolean
+}
+
+function mergeCards(nytHits: DiscoverCard[], catalogHits: DiscoverCard[]): DiscoverCard[] {
+  const seen = new Set<string>()
+  const out: DiscoverCard[] = []
+  for (const book of [...nytHits, ...catalogHits]) {
+    const key = `${book.title.toLowerCase()}|${book.authors.join(',').toLowerCase()}`
+    if (seen.has(key) || seen.has(book.id)) continue
+    seen.add(key)
+    seen.add(book.id)
+    out.push(book)
+  }
+  return out
 }
 
 export function DiscoverPage({ apiKey, hasKey, hasBook, onAdd, onOpenSettings }: DiscoverPageProps) {
@@ -44,9 +59,12 @@ export function DiscoverPage({ apiKey, hasKey, hasBook, onAdd, onOpenSettings }:
   const [authorQuery, setAuthorQuery] = useState('')
   const [listSlug, setListSlug] = useState(NYT_LISTS[0].slug)
 
-  const [searchResults, setSearchResults] = useState<SearchResult[]>([])
+  const [archive, setArchive] = useState<ArchivedNytBook[]>(() => loadNytArchive()?.books ?? [])
+  const [archiveStatus, setArchiveStatus] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle')
+  const [nytHits, setNytHits] = useState<DiscoverCard[]>([])
+  const [catalogHits, setCatalogHits] = useState<DiscoverCard[]>([])
   const [listBooks, setListBooks] = useState<NytListBook[]>([])
-  const [searchLoading, setSearchLoading] = useState(false)
+  const [catalogLoading, setCatalogLoading] = useState(false)
   const [listLoading, setListLoading] = useState(false)
   const [searchError, setSearchError] = useState<string | null>(null)
   const [listError, setListError] = useState<string | null>(null)
@@ -56,42 +74,93 @@ export function DiscoverPage({ apiKey, hasKey, hasBook, onAdd, onOpenSettings }:
     return titleQuery.trim().length >= 2 || authorQuery.trim().length >= 2
   }, [titleQuery, authorQuery])
 
-  // Title / author catalog search (Open Library) — no NYT key required
+  // Prefetch current + past NYT weeks into a local archive for instant search.
   useEffect(() => {
-    if (!searching) {
-      setSearchResults([])
-      setSearchError(null)
-      setSearchLoading(false)
+    if (!hasKey) {
+      setArchive([])
+      setArchiveStatus('idle')
       return
     }
 
     const controller = new AbortController()
+    const hadCache = (loadNytArchive()?.books.length ?? 0) > 0
+    setArchiveStatus(hadCache ? 'ready' : 'loading')
+
+    ensureNytArchive(apiKey, controller.signal)
+      .then((books) => {
+        setArchive(books)
+        setArchiveStatus('ready')
+      })
+      .catch((err: Error) => {
+        if (err.name === 'AbortError') return
+        setArchiveStatus(hadCache ? 'ready' : 'error')
+      })
+
+    return () => controller.abort()
+  }, [apiKey, hasKey])
+
+  // Progressive search: NYT archive instantly, Open Library catalog afterward.
+  useEffect(() => {
+    if (!searching) {
+      setNytHits([])
+      setCatalogHits([])
+      setSearchError(null)
+      setCatalogLoading(false)
+      return
+    }
+
+    const title = titleQuery.trim()
+    const author = authorQuery.trim()
+    const localHits = searchNytArchive(archive, title, author).map((book) => ({
+      id: book.id,
+      title: book.title,
+      authors: book.authors,
+      coverUrl: book.coverUrl,
+      rank: book.rank,
+      weeksOnList: book.weeksOnList,
+      source: 'nyt' as const,
+      nytList: book.listName,
+      description: book.description,
+      pastBestSeller: book.fromPastList,
+    }))
+    setNytHits(localHits)
+
+    const controller = new AbortController()
     const timer = window.setTimeout(async () => {
-      setSearchLoading(true)
+      setCatalogLoading(true)
       setSearchError(null)
       try {
         const results = await searchBooks(
           {
-            title: titleQuery.trim() || undefined,
-            author: authorQuery.trim() || undefined,
+            title: title || undefined,
+            author: author || undefined,
           },
           controller.signal,
         )
-        setSearchResults(results)
+        setCatalogHits(
+          results.map((book) => ({
+            id: book.id,
+            title: book.title,
+            authors: book.authors,
+            coverUrl: book.coverUrl,
+            source: 'search' as const,
+          })),
+        )
       } catch (err) {
         if ((err as Error).name === 'AbortError') return
-        setSearchResults([])
-        setSearchError((err as Error).message || 'Search failed')
+        // Keep NYT hits even if catalog search fails.
+        setSearchError((err as Error).message || 'Catalog search failed')
+        setCatalogHits([])
       } finally {
-        setSearchLoading(false)
+        setCatalogLoading(false)
       }
-    }, 300)
+    }, 250)
 
     return () => {
       controller.abort()
       window.clearTimeout(timer)
     }
-  }, [titleQuery, authorQuery, searching])
+  }, [titleQuery, authorQuery, searching, archive])
 
   // NYT bestsellers when not actively searching
   useEffect(() => {
@@ -121,13 +190,7 @@ export function DiscoverPage({ apiKey, hasKey, hasBook, onAdd, onOpenSettings }:
   }, [apiKey, hasKey, listSlug, searching])
 
   const cards: DiscoverCard[] = searching
-    ? searchResults.map((book) => ({
-        id: book.id,
-        title: book.title,
-        authors: book.authors,
-        coverUrl: book.coverUrl,
-        source: 'search' as const,
-      }))
+    ? mergeCards(nytHits, catalogHits)
     : listBooks.map((book) => ({
         id: book.id,
         title: book.title,
@@ -138,9 +201,10 @@ export function DiscoverPage({ apiKey, hasKey, hasBook, onAdd, onOpenSettings }:
         source: 'nyt' as const,
         nytList: book.listName,
         description: book.description,
+        pastBestSeller: false,
       }))
 
-  const loading = searching ? searchLoading : listLoading
+  const loading = searching ? catalogLoading && cards.length === 0 : listLoading
   const error = searching ? searchError : listError
 
   const clearSearch = () => {
@@ -154,7 +218,8 @@ export function DiscoverPage({ apiKey, hasKey, hasBook, onAdd, onOpenSettings }:
         Discover
       </Typography>
       <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
-        Search by title and/or author, or browse NYT bestsellers.
+        Search by title and/or author. With an NYT key, past bestsellers are included and appear
+        instantly.
       </Typography>
 
       <Stack spacing={1.25} sx={{ mb: 2 }}>
@@ -204,28 +269,40 @@ export function DiscoverPage({ apiKey, hasKey, hasBook, onAdd, onOpenSettings }:
             Bestsellers
           </Typography>
           {hasKey ? (
-            <Stack
-              direction="row"
-              spacing={1}
-              sx={{
-                overflowX: 'auto',
-                pb: 1.5,
-                mx: -0.5,
-                px: 0.5,
-                '&::-webkit-scrollbar': { display: 'none' },
-              }}
-            >
-              {NYT_LISTS.map((list) => (
-                <Chip
-                  key={list.slug}
-                  label={list.label}
-                  clickable
-                  color={listSlug === list.slug ? 'primary' : 'default'}
-                  variant={listSlug === list.slug ? 'filled' : 'outlined'}
-                  onClick={() => setListSlug(list.slug)}
-                />
-              ))}
-            </Stack>
+            <>
+              {archiveStatus === 'loading' ? (
+                <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
+                  Caching recent + past NYT lists for faster search…
+                </Typography>
+              ) : null}
+              {archiveStatus === 'ready' && archive.length > 0 ? (
+                <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
+                  Search includes {archive.length} titles from current and past NYT lists.
+                </Typography>
+              ) : null}
+              <Stack
+                direction="row"
+                spacing={1}
+                sx={{
+                  overflowX: 'auto',
+                  pb: 1.5,
+                  mx: -0.5,
+                  px: 0.5,
+                  '&::-webkit-scrollbar': { display: 'none' },
+                }}
+              >
+                {NYT_LISTS.map((list) => (
+                  <Chip
+                    key={list.slug}
+                    label={list.label}
+                    clickable
+                    color={listSlug === list.slug ? 'primary' : 'default'}
+                    variant={listSlug === list.slug ? 'filled' : 'outlined'}
+                    onClick={() => setListSlug(list.slug)}
+                  />
+                ))}
+              </Stack>
+            </>
           ) : (
             <Alert
               severity="info"
@@ -236,21 +313,31 @@ export function DiscoverPage({ apiKey, hasKey, hasBook, onAdd, onOpenSettings }:
                 </Button>
               }
             >
-              Add an NYT API key in Settings to browse bestseller lists. Search above works without a
-              key.
+              Add an NYT API key to browse current lists and search past bestsellers. Open Library
+              search still works above without a key.
             </Alert>
           )}
         </>
       ) : (
-        <Typography variant="subtitle2" sx={{ mb: 1 }}>
-          Search results
-          {titleQuery.trim() ? ` · title “${titleQuery.trim()}”` : ''}
-          {authorQuery.trim() ? ` · author “${authorQuery.trim()}”` : ''}
-        </Typography>
+        <Stack spacing={0.75} sx={{ mb: 1 }}>
+          <Typography variant="subtitle2">
+            Search results
+            {titleQuery.trim() ? ` · title “${titleQuery.trim()}”` : ''}
+            {authorQuery.trim() ? ` · author “${authorQuery.trim()}”` : ''}
+          </Typography>
+          <Typography variant="caption" color="text.secondary">
+            {nytHits.length
+              ? `${nytHits.length} from NYT archive`
+              : hasKey
+                ? 'No NYT archive matches'
+                : 'Add an NYT key to include past bestsellers'}
+            {catalogLoading ? ' · loading catalog…' : catalogHits.length ? ` · ${catalogHits.length} from catalog` : ''}
+          </Typography>
+        </Stack>
       )}
 
       {error ? (
-        <Alert severity="error" sx={{ mb: 2 }}>
+        <Alert severity={searching && cards.length ? 'warning' : 'error'} sx={{ mb: 2 }}>
           {error}
         </Alert>
       ) : null}
@@ -273,16 +360,17 @@ export function DiscoverPage({ apiKey, hasKey, hasBook, onAdd, onOpenSettings }:
         </Typography>
       ) : null}
 
-      {!loading && cards.length > 0 ? (
+      {cards.length > 0 ? (
         <Grid container spacing={1.25}>
           {cards.map((book) => (
-            <Grid key={book.id} size={6}>
+            <Grid key={`${book.source}-${book.id}`} size={6}>
               <DiscoverBookCard
                 title={book.title}
                 authors={book.authors}
                 coverUrl={book.coverUrl}
                 rank={book.rank}
                 weeksOnList={book.weeksOnList}
+                pastBestSeller={book.pastBestSeller}
                 onShelf={hasBook(book.id)}
                 onOpen={() =>
                   setSelected({
@@ -313,6 +401,12 @@ export function DiscoverPage({ apiKey, hasKey, hasBook, onAdd, onOpenSettings }:
             </Grid>
           ))}
         </Grid>
+      ) : null}
+
+      {searching && catalogLoading && cards.length > 0 ? (
+        <Box sx={{ display: 'flex', justifyContent: 'center', py: 2 }}>
+          <CircularProgress size={22} />
+        </Box>
       ) : null}
 
       <BookDetailDialog
