@@ -12,6 +12,8 @@ const nytProxy = {
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [react()],
+  // GitHub Pages project site: https://shibuadaniel.github.io/book-tracker/
+  base: process.env.GITHUB_PAGES === '1' ? '/book-tracker/' : '/',
   server: {
     host: '127.0.0.1',
     port: 5173,
